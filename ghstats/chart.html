@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<html>
+	<head>
+		<style>
+
+			body {
+				font: 10px sans-serif;
+			}
+
+			.axis path,
+			.axis line {
+				fill: none;
+				stroke: #000;
+				shape-rendering: crispEdges;
+			}
+
+			.x.axis path {
+				display: none;
+			}
+
+			.line {
+				fill: none;
+				stroke-width: 1.5px;
+			}
+
+		</style>
+	</head>
+	<body>
+		<script src="d3.v3.js"></script>
+		<script>
+
+			var margin = {top: 20, right: 100, bottom: 50, left: 50};
+			var width = window.innerWidth;
+			var height = window.innerHeight;
+
+			var parseDate = d3.time.format("%Y-%m-%d").parse;
+
+			var x = d3.time.scale()
+				.range([0, width - margin.left - margin.right]);
+
+			var y = d3.scale.log()
+				.range([height - margin.top - margin.bottom, 0]);
+
+			var color = d3.scale.category10();
+
+			var line = d3.svg.line()
+				.interpolate("basis")
+				.x(function(d) { return x(d.date); })
+				.y(function(d) { return y(d.value); });
+
+			var svg = d3.select("body").append("svg");
+			svg.attr("width", width);
+			svg.attr("height", height);
+			svg = svg.append("g").attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+			d3.tsv("output.tsv", function(error, data) {
+				var domain = d3.keys(data[0]).filter(function(name) { return name !== "date"; });
+				color.domain(domain);
+
+				var languages = domain.map(function(name) {
+					return {
+						name: name,
+						values: data.map(function(d) {
+							return { date: parseDate(d.date), value: +d[name] };
+						})
+					};
+				});
+
+				x.domain(d3.extent(data, function(d) { return parseDate(d.date); }));
+				y.domain([d3.min(languages, function(c) { return d3.min(c.values, function(v) { return v.value; }); }), d3.max(languages, function(c) { return d3.max(c.values, function(v) { return v.value; }); })]);
+
+				svg.append("g")
+					.attr("class", "x axis")
+					.attr("transform", "translate(0," + (height - margin.top - margin.bottom) + ")")
+					.call(d3.svg.axis().scale(x).orient("bottom"));
+
+				svg.append("g")
+					.attr("class", "y axis")
+					.call(d3.svg.axis().scale(y).orient("left").tickFormat(d3.format(".1f")))
+
+				.append("text")
+					.attr("transform", "rotate(-90)")
+					.attr("y", 6)
+					.attr("dy", ".71em")
+					.style("text-anchor", "end")
+					.text("% GitHub Repositories (50+ Stars)");
+
+				var language = svg.selectAll()
+					.data(languages)
+					.enter().append("g")
+
+				language.append("path")
+					.attr("class", "line")
+					.attr("d", function(d) { return line(d.values); })
+					.style("stroke", function(d) { return color(d.name); });
+
+				language.append("text")
+					.datum(function(d) { return {name: d.name, value: d.values[d.values.length - 1]}; })
+					.attr("transform", function(d) { return "translate(" + x(d.value.date) + "," + y(d.value.value) + ")"; })
+					.attr("x", 3)
+					.attr("dy", ".35em")
+					.text(function(d) { return d.name; });
+			});
+
+		</script>
+	</body>
+</html>
