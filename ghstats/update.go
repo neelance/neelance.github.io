@@ -5,17 +5,18 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github.com/coopernurse/gorp"
-	_ "github.com/mattn/go-sqlite3"
 	"io"
 	"net/http"
 	"os"
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/coopernurse/gorp"
+	_ "github.com/mattn/go-sqlite3"
 )
 
-var start = time.Date(2014, 8, 10, 0, 0, 0, 0, time.UTC)
+var start = time.Date(2014, 9, 10, 0, 0, 0, 0, time.UTC)
 var end = time.Now()
 var db *sql.DB
 
