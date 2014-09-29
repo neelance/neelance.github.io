@@ -16,7 +16,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-var start = time.Date(2014, 9, 10, 0, 0, 0, 0, time.UTC)
+var start = time.Date(2014, 9, 27, 0, 0, 0, 0, time.UTC)
 var end = time.Now()
 var db *sql.DB
 
