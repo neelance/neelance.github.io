@@ -12,11 +12,36 @@ import (
 	"strings"
 	"time"
 
-	"github.com/coopernurse/gorp"
 	_ "github.com/mattn/go-sqlite3"
 )
 
-var start = time.Date(2014, 11, 8, 0, 0, 0, 0, time.UTC)
+type Event struct {
+	CreatedAt  time.Time   `json:"created_at"`
+	Repository *Repository `json:"repository"`
+}
+
+type Repository struct {
+	Id           int       `json:"id"`
+	Organization string    `json:"organization"`
+	Owner        string    `json:"owner"`
+	Name         string    `json:"name"`
+	Fork         bool      `json:"fork"`
+	Forks        int       `json:"forks"`
+	CreatedAt    time.Time `json:"created_at"`
+	PushedAt     time.Time `json:"pushed_at"`
+	LastEventAt  time.Time `json:"-"`
+	Language     string    `json:"language"`
+	MasterBranch string    `json:"master_branch"`
+	Watchers     int       `json:"watchers"`
+	Stargazers   int       `json:"stargazers"`
+	OpenIssues   int       `json:"open_issues"`
+	Size         int       `json:"size"`
+	HasIssues    bool      `json:"has_issues"`
+	HasWiki      bool      `json:"has_wiki"`
+	HasDownloads bool      `json:"has_downloads"`
+}
+
+var start = time.Date(2015, 1, 1, 0, 0, 0, 0, time.UTC)
 var end = time.Now()
 var db *sql.DB
 
@@ -58,35 +83,6 @@ func download() {
 			resp.Body.Close()
 		}
 	}
-}
-
-type Event struct {
-	CreatedAt  time.Time   `json:"created_at"`
-	Repository *Repository `json:"repository"`
-}
-
-type Repository struct {
-	Id           int       `json:"id"`
-	Organization string    `json:"organization"`
-	Owner        string    `json:"owner"`
-	Name         string    `json:"name"`
-	URL          string    `json:"url"`
-	Fork         bool      `json:"fork"`
-	Forks        int       `json:"forks"`
-	CreatedAt    time.Time `json:"created_at"`
-	PushedAt     time.Time `json:"pushed_at"`
-	LastEventAt  time.Time `json:"-"`
-	Description  string    `json:"description"`
-	Homepage     string    `json:"homepage"`
-	Language     string    `json:"language"`
-	MasterBranch string    `json:"master_branch"`
-	Watchers     int       `json:"watchers"`
-	Stargazers   int       `json:"stargazers"`
-	OpenIssues   int       `json:"open_issues"`
-	Size         int       `json:"size"`
-	HasIssues    bool      `json:"has_issues"`
-	HasWiki      bool      `json:"has_wiki"`
-	HasDownloads bool      `json:"has_downloads"`
 }
 
 func updateDB() {
@@ -138,12 +134,6 @@ func updateDB() {
 		close(c)
 	}()
 
-	dbmap := &gorp.DbMap{Db: db, Dialect: gorp.SqliteDialect{}}
-	dbmap.AddTableWithName(Repository{}, "repositories").SetKeys(false, "Id")
-	if err := dbmap.CreateTablesIfNotExists(); err != nil {
-		panic(err)
-	}
-
 	lastEvent := make([]time.Time, 30000000)
 	newCount := 0
 	updatedCount := 0
@@ -157,25 +147,44 @@ func updateDB() {
 		}
 	}()
 
+	selectStmt, err := db.Prepare(`select LastEventAt from repositories where Id=?`)
+	if err != nil {
+		panic(err)
+	}
+
+	updateStmt, err := db.Prepare(`update repositories set Organization=?, Owner=?, Name=?, Fork=?, Forks=?, CreatedAt=?, PushedAt=?, LastEventAt=?, Language=?, MasterBranch=?, Watchers=?, Stargazers=?, OpenIssues=?, Size=?, HasIssues=?, HasWiki=?, HasDownloads=? where Id=?`)
+	if err != nil {
+		panic(err)
+	}
+
+	insertStmt, err := db.Prepare(`insert into repositories (Id, Organization, Owner, Name, Fork, Forks, CreatedAt, PushedAt, LastEventAt, Language, MasterBranch, Watchers, Stargazers, OpenIssues, Size, HasIssues, HasWiki, HasDownloads) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	if err != nil {
+		panic(err)
+	}
+
 	for r := range c {
 		if lastEvent[r.Id].After(r.LastEventAt) {
 			continue
 		}
-		if e, _ := dbmap.Get(Repository{}, r.Id); e != nil {
-			existing := e.(*Repository)
-			if r.LastEventAt.After(existing.LastEventAt) {
+		var existingLastEventAt time.Time
+		err := selectStmt.QueryRow(r.Id).Scan(&existingLastEventAt)
+		if err == nil {
+			if r.LastEventAt.After(existingLastEventAt) {
 				lastEvent[r.Id] = r.LastEventAt
-				if _, err := dbmap.Update(r); err != nil {
+				if _, err := updateStmt.Exec(r.Organization, r.Owner, r.Name, r.Fork, r.Forks, r.CreatedAt, r.PushedAt, r.LastEventAt, r.Language, r.MasterBranch, r.Watchers, r.Stargazers, r.OpenIssues, r.Size, r.HasIssues, r.HasWiki, r.HasDownloads, r.Id); err != nil {
 					panic(err)
 				}
 				updatedCount++
 				continue
 			}
-			lastEvent[r.Id] = existing.LastEventAt
+			lastEvent[r.Id] = existingLastEventAt
 			continue
 		}
+		if err != sql.ErrNoRows {
+			panic(err)
+		}
 		lastEvent[r.Id] = r.LastEventAt
-		if err := dbmap.Insert(r); err != nil {
+		if _, err := insertStmt.Exec(r.Id, r.Organization, r.Owner, r.Name, r.Fork, r.Forks, r.CreatedAt, r.PushedAt, r.LastEventAt, r.Language, r.MasterBranch, r.Watchers, r.Stargazers, r.OpenIssues, r.Size, r.HasIssues, r.HasWiki, r.HasDownloads); err != nil {
 			panic(err)
 		}
 		newCount++
