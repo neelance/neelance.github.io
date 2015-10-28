@@ -32,7 +32,6 @@
 	<body>
 		<script src="d3.v3.js"></script>
 		<script>
-
 			var margin = {top: 20, right: 100, bottom: 50, left: 50};
 			var width = window.innerWidth;
 			var height = window.innerHeight;
@@ -87,7 +86,7 @@
 					.attr("y", 6)
 					.attr("dy", ".71em")
 					.style("text-anchor", "end")
-					.text("% GitHub Repositories (100+ Stars)");
+					.text("% GitHub Repositories With At Least 100 Stars");
 
 				var language = svg.selectAll()
 					.data(languages)
