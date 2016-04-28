@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"time"
 )
 
@@ -35,12 +36,15 @@ func main() {
 	fmt.Println(languageCounts)
 
 	var languages []string
-	languageIndices := make(map[string]int)
 	for lang, count := range languageCounts {
 		if count > 200 {
-			languageIndices[lang] = len(languages)
 			languages = append(languages, lang)
 		}
+	}
+	sort.Strings(languages)
+	languageIndices := make(map[string]int)
+	for i, lang := range languages {
+		languageIndices[lang] = i
 	}
 
 	fmt.Println(languages, len(languages))
