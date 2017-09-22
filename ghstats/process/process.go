@@ -78,16 +78,23 @@ func main() {
 		out.WriteString("\t" + language)
 	}
 	out.WriteString("\n")
-	totals := make([]int, len(languages))
-	all := 0
+	totals := make([]float64, len(languages))
 	for t, counts := range values {
 		out.WriteString(time.Unix((start+int64(t))*interval, 0).Format("2006-01-02"))
 		for i := range languages {
-			all += counts[i]
+			totals[i] += float64(counts[i])
+			// totals[i] = totals[i] * 0.99
+		}
+		all := float64(0)
+		for i := range languages {
+			all += totals[i]
 		}
 		for i := range languages {
-			totals[i] += counts[i]
-			fmt.Fprintf(out, "\t%f", float64(totals[i])/float64(all)*100)
+			v := totals[i] / all * 100
+			if v < 0.1 {
+				v = 0.1
+			}
+			fmt.Fprintf(out, "\t%f", v)
 		}
 		out.WriteString("\n")
 	}

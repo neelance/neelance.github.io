@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -27,12 +28,13 @@ func main() {
 
 	client := github.NewClient(tc)
 
-	offset := 1000000
+	offset := 200000
 	for offset >= 100 {
 		newOffset := 0
 		page := 1
 		for page <= 10 {
-			results, _, err := client.Search.Repositories(fmt.Sprintf("stars:<=%d", offset), &github.SearchOptions{
+			time.Sleep(1)
+			results, _, err := client.Search.Repositories(context.Background(), fmt.Sprintf("stars:%d..%d", offset/2, offset), &github.SearchOptions{
 				Sort:  "stars",
 				Order: "desc",
 				ListOptions: github.ListOptions{
@@ -42,8 +44,13 @@ func main() {
 			})
 			if err != nil {
 				fmt.Println(err)
-				time.Sleep(20 * time.Second)
+				time.Sleep(10 * time.Second)
 				continue
+			}
+
+			if len(results.Repositories) == 0 {
+				fmt.Println("no results")
+				break
 			}
 
 			for _, repo := range results.Repositories {
@@ -60,17 +67,17 @@ func main() {
 
 			page++
 			fmt.Println("Count:", len(repos))
-
-			file, err := os.Create("../repos.json")
-			if err != nil {
-				panic(err)
-			}
-			if err := json.NewEncoder(file).Encode(repos); err != nil {
-				panic(err)
-			}
-			file.Close()
 		}
 
 		offset = newOffset
 	}
+
+	file, err := os.Create("../repos.json")
+	if err != nil {
+		panic(err)
+	}
+	if err := json.NewEncoder(file).Encode(repos); err != nil {
+		panic(err)
+	}
+	file.Close()
 }
