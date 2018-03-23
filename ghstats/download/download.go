@@ -1,15 +1,13 @@
 package main
 
 import (
-	"context"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
 	"time"
 
 	"golang.org/x/oauth2"
-
-	"github.com/google/go-github/github"
 )
 
 type Repository struct {
@@ -21,52 +19,72 @@ type Repository struct {
 func main() {
 	repos := make(map[string]*Repository)
 
-	ts := oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: os.Getenv("GITHUB_TOKEN")},
-	)
-	tc := oauth2.NewClient(oauth2.NoContext, ts)
-
-	client := github.NewClient(tc)
-
 	offset := 200000
-	for offset >= 100 {
+	for offset >= 200 {
+		var after *string
 		newOffset := 0
-		page := 1
-		for page <= 10 {
-			time.Sleep(1)
-			results, _, err := client.Search.Repositories(context.Background(), fmt.Sprintf("stars:%d..%d", offset/2, offset), &github.SearchOptions{
-				Sort:  "stars",
-				Order: "desc",
-				ListOptions: github.ListOptions{
-					PerPage: 100,
-					Page:    page,
-				},
-			})
-			if err != nil {
-				fmt.Println(err)
-				time.Sleep(10 * time.Second)
-				continue
-			}
-
-			if len(results.Repositories) == 0 {
-				fmt.Println("no results")
-				break
-			}
-
-			for _, repo := range results.Repositories {
-				if repo.Language != nil {
-					fmt.Println(*repo.StargazersCount, *repo.FullName, *repo.Language)
-					repos[*repo.FullName] = &Repository{
-						StargazersCount: *repo.StargazersCount,
-						Language:        *repo.Language,
-						CreatedAt:       repo.CreatedAt.Time,
+		for {
+			var data struct {
+				Search struct {
+					PageInfo struct {
+						HasNextPage bool
+						EndCursor   string
+					}
+					Nodes []struct {
+						NameWithOwner string
+						CreatedAt     time.Time
+						Stargazers    struct {
+							TotalCount int
+						}
+						PrimaryLanguage struct {
+							Name string
+						}
 					}
 				}
-				newOffset = *repo.StargazersCount
 			}
 
-			page++
+			graphqlRequest(`
+				query ($query: String!, $after: String) {
+					search(type: REPOSITORY, query: $query, first: 100, after: $after) {
+						pageInfo {
+							hasNextPage
+							endCursor
+						}
+						repositoryCount
+						nodes {
+							... on Repository {
+								nameWithOwner
+								createdAt
+								stargazers {
+									totalCount
+								}
+								primaryLanguage {
+									name
+								}
+							}
+						}
+					}
+				}		
+			`, map[string]interface{}{
+				"query": fmt.Sprintf("stars:%d..%d", offset/2, offset),
+				"after": after,
+			}, &data)
+
+			for _, repo := range data.Search.Nodes {
+				fmt.Println(repo.Stargazers.TotalCount, repo.NameWithOwner, repo.PrimaryLanguage.Name)
+				repos[repo.NameWithOwner] = &Repository{
+					StargazersCount: repo.Stargazers.TotalCount,
+					Language:        repo.PrimaryLanguage.Name,
+					CreatedAt:       repo.CreatedAt,
+				}
+				newOffset = repo.Stargazers.TotalCount
+			}
 			fmt.Println("Count:", len(repos))
+
+			if !data.Search.PageInfo.HasNextPage {
+				break
+			}
+			after = &data.Search.PageInfo.EndCursor
 		}
 
 		offset = newOffset
@@ -80,4 +98,46 @@ func main() {
 		panic(err)
 	}
 	file.Close()
+}
+
+var client = oauth2.NewClient(oauth2.NoContext, oauth2.StaticTokenSource(
+	&oauth2.Token{AccessToken: os.Getenv("GITHUB_TOKEN")},
+))
+
+func graphqlRequest(query string, variables map[string]interface{}, data interface{}) {
+	body, err := json.Marshal(struct {
+		Query     string                 `json:"query"`
+		Variables map[string]interface{} `json:"variables"`
+	}{
+		Query:     query,
+		Variables: variables,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	resp, err := client.Post("https://api.github.com/graphql", "application/json", bytes.NewReader(body))
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	respBody := struct {
+		Data   interface{} `json:"data"`
+		Errors []struct {
+			Message string
+		}
+	}{
+		Data: data,
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&respBody); err != nil {
+		panic(err)
+	}
+
+	if len(respBody.Errors) != 0 {
+		for _, err := range respBody.Errors {
+			fmt.Println(err.Message)
+		}
+		panic("graphql errors")
+	}
 }
