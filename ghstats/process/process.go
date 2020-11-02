@@ -1,8 +1,9 @@
 package main
 
 import (
-	"encoding/json"
+	"encoding/csv"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"time"
@@ -11,20 +12,34 @@ import (
 const interval = 60 * 60 * 24 * 7
 
 type Repository struct {
-	StargazersCount int
-	Language        string
-	CreatedAt       time.Time
+	Language  string
+	CreatedAt time.Time
 }
 
 func main() {
-	file, err := os.Open("../repos.json")
+	file, err := os.Open("../repos.csv")
 	if err != nil {
 		panic(err)
 	}
-
-	var repos map[string]*Repository
-	if err := json.NewDecoder(file).Decode(&repos); err != nil {
-		panic(err)
+	var repos []*Repository
+	r := csv.NewReader(file)
+	r.Read() // skip headers
+	for {
+		record, err := r.Read()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			panic(err)
+		}
+		t, err := time.Parse("2006-01-02", record[1])
+		if err != nil {
+			panic(err)
+		}
+		repos = append(repos, &Repository{
+			Language:  record[2],
+			CreatedAt: t,
+		})
 	}
 	file.Close()
 

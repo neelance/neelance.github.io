@@ -86,7 +86,7 @@
 					.attr("y", 6)
 					.attr("dy", ".71em")
 					.style("text-anchor", "end")
-					.text("% GitHub Repositories With At Least 100 Stars");
+					.text("% GitHub Repositories With At Least 500 Stars");
 
 				var language = svg.selectAll()
 					.data(languages)
@@ -102,6 +102,7 @@
 					.attr("transform", function(d) { return "translate(" + x(d.value.date) + "," + y(d.value.value) + ")"; })
 					.attr("x", 3)
 					.attr("dy", ".35em")
+          .style("fill", function(d) { return color(d.name); })
 					.text(function(d) { return d.name; });
 			});
 

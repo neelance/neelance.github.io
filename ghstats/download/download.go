@@ -2,25 +2,31 @@ package main
 
 import (
 	"bytes"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
+	"strconv"
 	"time"
 
 	"golang.org/x/oauth2"
 )
 
-type Repository struct {
-	StargazersCount int
-	Language        string
-	CreatedAt       time.Time
-}
-
 func main() {
-	repos := make(map[string]*Repository)
+	f, err := os.Create("../repos.csv")
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	w := csv.NewWriter(f)
+	n := 0
+	defer w.Flush()
+	w.Write([]string{"name", "createdAt", "language", "stargazers"})
 
 	offset := 200000
-	for offset >= 200 {
+	for offset >= 500 {
 		var after *string
 		newOffset := 0
 		for {
@@ -64,7 +70,7 @@ func main() {
 							}
 						}
 					}
-				}		
+				}
 			`, map[string]interface{}{
 				"query": fmt.Sprintf("stars:%d..%d", offset/2, offset),
 				"after": after,
@@ -72,14 +78,16 @@ func main() {
 
 			for _, repo := range data.Search.Nodes {
 				fmt.Println(repo.Stargazers.TotalCount, repo.NameWithOwner, repo.PrimaryLanguage.Name)
-				repos[repo.NameWithOwner] = &Repository{
-					StargazersCount: repo.Stargazers.TotalCount,
-					Language:        repo.PrimaryLanguage.Name,
-					CreatedAt:       repo.CreatedAt,
-				}
+				w.Write([]string{
+					repo.NameWithOwner,
+					repo.CreatedAt.Format("2006-01-02"),
+					repo.PrimaryLanguage.Name,
+					strconv.Itoa(repo.Stargazers.TotalCount),
+				})
+				n++
 				newOffset = repo.Stargazers.TotalCount
 			}
-			fmt.Println("Count:", len(repos))
+			fmt.Println("Count:", n)
 
 			if !data.Search.PageInfo.HasNextPage {
 				break
@@ -89,15 +97,6 @@ func main() {
 
 		offset = newOffset
 	}
-
-	file, err := os.Create("../repos.json")
-	if err != nil {
-		panic(err)
-	}
-	if err := json.NewEncoder(file).Encode(repos); err != nil {
-		panic(err)
-	}
-	file.Close()
 }
 
 var client = oauth2.NewClient(oauth2.NoContext, oauth2.StaticTokenSource(
@@ -116,28 +115,34 @@ func graphqlRequest(query string, variables map[string]interface{}, data interfa
 		panic(err)
 	}
 
-	resp, err := client.Post("https://api.github.com/graphql", "application/json", bytes.NewReader(body))
-	if err != nil {
-		panic(err)
-	}
-	defer resp.Body.Close()
-
-	respBody := struct {
-		Data   interface{} `json:"data"`
-		Errors []struct {
-			Message string
+	for {
+		resp, err := client.Post("https://api.github.com/graphql", "application/json", bytes.NewReader(body))
+		if err != nil {
+			log.Println(err)
+			continue
 		}
-	}{
-		Data: data,
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&respBody); err != nil {
-		panic(err)
-	}
+		defer resp.Body.Close()
 
-	if len(respBody.Errors) != 0 {
-		for _, err := range respBody.Errors {
-			fmt.Println(err.Message)
+		respBody := struct {
+			Data   interface{} `json:"data"`
+			Errors []struct {
+				Message string
+			}
+		}{
+			Data: data,
 		}
-		panic("graphql errors")
+
+		if err := json.NewDecoder(resp.Body).Decode(&respBody); err != nil {
+			panic(err)
+		}
+
+		if len(respBody.Errors) != 0 {
+			for _, err := range respBody.Errors {
+				log.Println(err.Message)
+			}
+			continue
+		}
+
+		break
 	}
 }
