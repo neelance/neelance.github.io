@@ -70,7 +70,7 @@
 				});
 
 				x.domain(d3.extent(data, function(d) { return parseDate(d.date); }));
-				y.domain([0.45, d3.max(languages, function(c) { return d3.max(c.values, function(v) { return v.value; }); })]);
+				y.domain([0.3, d3.max(languages, function(c) { return d3.max(c.values, function(v) { return v.value; }); })]);
 
 				svg.append("g")
 					.attr("class", "x axis")
@@ -86,7 +86,7 @@
 					.attr("y", 6)
 					.attr("dy", ".71em")
 					.style("text-anchor", "end")
-					.text("% GitHub Repositories With At Least 500 Stars");
+					.text("% GitHub Repositories With At Least 1000 Stars");
 
 				var language = svg.selectAll()
 					.data(languages)

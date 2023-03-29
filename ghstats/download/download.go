@@ -25,8 +25,8 @@ func main() {
 	defer w.Flush()
 	w.Write([]string{"name", "createdAt", "language", "stargazers"})
 
-	offset := 200000
-	for offset >= 500 {
+	offset := 500000
+	for offset >= 1000 {
 		var after *string
 		newOffset := 0
 		for {

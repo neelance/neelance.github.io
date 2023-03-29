@@ -52,7 +52,7 @@ func main() {
 
 	var languages []string
 	for lang, count := range languageCounts {
-		if count > 200 && lang != "" {
+		if count > 100 && lang != "" {
 			languages = append(languages, lang)
 		}
 	}
